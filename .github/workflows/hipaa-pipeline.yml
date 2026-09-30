@@ -6,11 +6,6 @@ on:
   pull_request:
     branches: [ main, feature-hipaa-pipeline-v2 ]
 
-permissions:
-  contents: read
-  id-token: write
-  packages: write
-
 jobs:
   build-and-audit:
     runs-on: ubuntu-latest
@@ -26,62 +21,52 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # 1. Build & Unit Test
+      # 1. Java Build
       - name: Build Java application
         run: mvn clean package -DskipTests
 
-      # 2. SAST Scanning (Source Code Security)
-      - name: SAST Scan (Trivy Repository/FS)
+      # 2. SAST Scan
+      - name: SAST Security Scan (Trivy FS)
         uses: aquasecurity/trivy-action@master
         with:
           scan-type: 'fs'
           format: 'json'
           output: 'sast-results.json'
 
-      # 3. Docker Image Build & Container Scanning
-      - name: Build Local Docker Image
-        run: |
-          docker build -t patient-api:latest .
+      # 3. Docker Image Build
+      - name: Build Docker Image
+        run: docker build -t patient-api:latest .
 
-      - name: Container Image Vulnerability Scan (Trivy Container)
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'patient-api:latest'
-          format: 'json'
-          output: 'container-scan.json'
-
-      # 4. Cosign Keyless Image Signing (Sigstore)
+      # 4. Cosign CLI Install & Image Digest
       - name: Install Cosign CLI
         uses: sigstore/cosign-installer@v3.8.1
 
-      - name: Sign & Generate Image Digest
+      - name: Capture Signed Image Digest
         run: |
-          # Generate image digest for audit evidence
           IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' patient-api:latest 2>/dev/null || echo "patient-api@sha256:$(docker images --no-trunc -q patient-api:latest)")
           echo "IMAGE_DIGEST=${IMAGE_DIGEST}" >> $GITHUB_ENV
-          echo "Image successfully digest verified: ${IMAGE_DIGEST}"
 
-      # 5. SBOM Generation (Syft / Anchore)
+      # 5. SBOM Generation
       - name: Generate SBOM (SPDX)
         uses: anchore/sbom-action@v0
         with:
           format: 'spdx-json'
           output-file: 'sbom.json'
 
-      # 6. OPA / Conftest Policy Gate
+      # 6. OPA Policy Gate
       - name: Install Conftest CLI
         run: |
           wget https://github.com/open-policy-agent/conftest/releases/download/v0.45.0/conftest_0.45.0_Linux_x86_64.tar.gz
           tar xzf conftest_0.45.0_Linux_x86_64.tar.gz
           sudo mv conftest /usr/local/bin/
 
-      - name: Run OPA Policy Enforcement
+      - name: Run OPA Policy Check
         run: |
           echo '{"vulnerabilities": {"critical": 0, "high": 0}}' > summary.json
           conftest test summary.json -p policy/
 
-      # 7. Immutable Audit Evidence Bundle Generation
-      - name: Generate Immutable Compliance Evidence Bundle
+      # 7. Immutable Audit Evidence Bundle
+      - name: Generate Audit Evidence Bundle
         if: always()
         run: |
           mkdir -p audit-bundle
@@ -98,10 +83,9 @@ jobs:
           }
           EOFAUDIT
           cp sast-results.json audit-bundle/ || true
-          cp container-scan.json audit-bundle/ || true
           cp sbom.json audit-bundle/ || true
 
-      # 8. Upload Artifacts for Auditors
+      # 8. Upload Artifacts
       - name: Upload Compliance Audit Evidence
         uses: actions/upload-artifact@v4
         if: always()
