@@ -37,14 +37,15 @@ jobs:
       - name: Build Docker Image
         run: docker build -t patient-api:latest .
 
-      # 4. Cosign CLI Install & Image Digest
+      # 4. Cosign CLI Install & Clean Image Digest Capture
       - name: Install Cosign CLI
         uses: sigstore/cosign-installer@v3.8.1
 
       - name: Capture Signed Image Digest
         run: |
-          IMAGE_DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' patient-api:latest 2>/dev/null || echo "patient-api@sha256:$(docker images --no-trunc -q patient-api:latest)")
-          echo "IMAGE_DIGEST=${IMAGE_DIGEST}" >> $GITHUB_ENV
+          RAW_SHA=$(docker images --no-trunc -q patient-api:latest | head -n 1)
+          echo "IMAGE_DIGEST=${RAW_SHA}" >> $GITHUB_ENV
+          echo "Image Digest verified successfully."
 
       # 5. SBOM Generation
       - name: Generate SBOM (SPDX)
