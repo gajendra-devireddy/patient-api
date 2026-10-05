@@ -1,0 +1,22 @@
+# Git version control
+.git
+.gitignore
+.github
+
+# Build outputs
+target/
+build/
+*.jar
+*.war
+
+# IDE & OS files
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Documentation & Audit bundles
+*.md
+audit-bundle/
+policy/
