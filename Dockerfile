@@ -1,19 +1,24 @@
-# Build Stage
-FROM maven:3.9-eclipse-temurin-17 AS builder
+# Stage 1: Build & Cache Dependencies
+FROM maven:3.9.6-eclipse-temurin-17-alpine AS builder
 WORKDIR /app
+
+# Cache Maven dependencies
 COPY pom.xml .
-COPY src ./src
-RUN mvn clean package
+RUN mvn dependency:go-offline -B
 
-# Production Stage - Hardened Container
-FROM eclipse-temurin:17-jre-alpine
+# Copy source and build (Run unit tests during build)
+COPY src ./src
+RUN mvn clean package -DskipTests=false
+
+# Stage 2: Production Runtime
+FROM eclipse-temurin:17-jre-alpine@sha256:d8122c4f8d5500e5e03a11d21b72186718bbd1ef20993510e3034963507d35eb
 WORKDIR /app
 
-# Non-root User Creation for Security Compliance
+# Non-root user compliance
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Copy Built Artifact
-COPY --from=builder /app/target/*.jar app.jar
+# Copy single application artifact safely
+COPY --from=builder /app/target/patient-api-*.jar app.jar
 RUN chown -R appuser:appgroup /app
 
 USER appuser
