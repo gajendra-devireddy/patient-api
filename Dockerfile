@@ -6,19 +6,19 @@ WORKDIR /app
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
-# Copy source and build (Run unit tests during build)
+# Copy source and build
 COPY src ./src
 RUN mvn clean package -DskipTests=false
 
 # Stage 2: Production Runtime
-FROM eclipse-temurin:17-jre-alpine@sha256:d8122c4f8d5500e5e03a11d21b72186718bbd1ef20993510e3034963507d35eb
+FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
 
 # Non-root user compliance
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Copy single application artifact safely
-COPY --from=builder /app/target/patient-api-*.jar app.jar
+# Copy application artifact
+COPY --from=builder /app/target/*.jar app.jar
 RUN chown -R appuser:appgroup /app
 
 USER appuser
